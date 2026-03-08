@@ -63,5 +63,6 @@ dkms.conf
 /.meson-subproject-wrap-hash.txt
 
 # Meson subproject generated state
+/subprojects/pool-allocator/
 /subprojects/packagecache/
 /subprojects/*.wraplock
