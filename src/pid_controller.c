@@ -1,4 +1,15 @@
-/* Configure pool size before including pool.h. */
+/**
+ * @file pid_controller.c
+ * @brief Fixed-point PID controller implementation.
+ *
+ * Provides the concrete implementation of the PID API declared in @ref fpc_pid.h.
+ * Instances are allocated from a fixed-size pool defined via @ref fpc_pool_config.h.
+ * The controller operates on Q16.16 fixed-point numbers and follows the discrete
+ * PID equations documented in the header, including optional derivative smoothing.
+ *
+ * @note Public API functions are documented in the header; internal helper
+ *       functions are marked @internal.
+ */
 #include "../include/fpc_config.h"
 #include "../include/fpc_pool_config.h"
 
@@ -7,6 +18,7 @@
 #include <limits.h>
 #include "pool.h"
 
+/** @internal */
 struct fpc_pid {
     pool_id_t pool_id;
     uint8_t initialized;
@@ -36,6 +48,19 @@ _Static_assert(sizeof(struct fpc_pid) <= POOL_ITEM_SIZE,
 static struct pool_t fpc_pid_pool_storage = {0};
 static pool_handle_t fpc_pid_pool_handle = NULL;
 
+/**
+ * @brief Clamp a 64-bit value to the int32_t range.
+ *
+ * @param value Value to clamp.
+ * @param min Minimum allowed value (inclusive).
+ * @param max Maximum allowed value (inclusive).
+ * @param clamped Output flag set to true if clamping occurred.
+ *
+ * @return int32_t Clamped value.
+ *
+ * @pre clamped must be a valid pointer.
+ * @post *clamped is set to true if and only if value was outside [min, max].
+ */
 static int32_t
 fpc_clamp_int32(int64_t value, int32_t min, int32_t max, bool *clamped)
 {
@@ -52,6 +77,22 @@ fpc_clamp_int32(int64_t value, int32_t min, int32_t max, bool *clamped)
     return (int32_t)bounded_value;
 }
 
+/**
+ * @brief Validate PID configuration parameters.
+ *
+ * @param cfg Configuration to validate.
+ *
+ * @return bool true if configuration is valid, false otherwise.
+ *
+ * @pre cfg may be NULL.
+ * @post Returns false if cfg is NULL or if any parameter is invalid.
+ * @note Valid configuration requires:
+ *   - cfg is non-NULL
+ *   - dt > 0 (positive sample time)
+ *   - out_min <= out_max (valid output bounds)
+ *   - integral_min <= integral_max (valid integral bounds)
+ *   - d_filter_alpha <= 65536 (valid smoothing coefficient)
+ */
 static bool
 fpc_pid_config_is_valid(const struct fpc_pid_config *cfg)
 {
@@ -78,6 +119,23 @@ fpc_pid_config_is_valid(const struct fpc_pid_config *cfg)
     return true;
 }
 
+/**
+ * @brief Validate and retrieve a writable PID controller pointer.
+ *
+ * @param ctx Controller handle to validate.
+ * @param valid_ctx Pointer to store the validated handle (output).
+ *
+ * @return enum fpc_status Status code indicating validation result.
+ *
+ * @retval FPC_STATUS_OK if ctx is valid and initialized.
+ * @retval FPC_STATUS_NULL_PTR if ctx or valid_ctx is NULL.
+ * @retval FPC_STATUS_NOT_INITIALIZED if pool or controller is not initialized.
+ *
+ * @pre Pool must be initialized via fpc_pid_pool_init().
+ * @post *valid_ctx is set to ctx on success.
+ * @note This function ensures the controller handle corresponds to an actual
+ *       allocated pool slot and has been initialized.
+ */
 static enum fpc_status
 fpc_pid_get_valid_pointer(struct fpc_pid *ctx, struct fpc_pid **valid_ctx)
 {
@@ -104,6 +162,23 @@ fpc_pid_get_valid_pointer(struct fpc_pid *ctx, struct fpc_pid **valid_ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @brief Validate and retrieve a read-only PID controller pointer.
+ *
+ * @param ctx Controller handle to validate.
+ * @param valid_ctx Pointer to store the validated const handle (output).
+ *
+ * @return enum fpc_status Status code indicating validation result.
+ *
+ * @retval FPC_STATUS_OK if ctx is valid and initialized.
+ * @retval FPC_STATUS_NULL_PTR if ctx or valid_ctx is NULL.
+ * @retval FPC_STATUS_NOT_INITIALIZED if pool or controller is not initialized.
+ *
+ * @pre Pool must be initialized via fpc_pid_pool_init().
+ * @post *valid_ctx is set to ctx on success.
+ * @note This function is identical to fpc_pid_get_valid_pointer() but for
+ *       const pointers used in getter functions.
+ */
 static enum fpc_status
 fpc_pid_get_valid_const_pointer(const struct fpc_pid *ctx,
                                 const struct fpc_pid **valid_ctx)
@@ -131,6 +206,16 @@ fpc_pid_get_valid_const_pointer(const struct fpc_pid *ctx,
     return FPC_STATUS_OK;
 }
 
+/**
+ * @brief Copy configuration from a struct to a PID controller instance.
+ *
+ * @param ctx Controller instance to update.
+ * @param cfg Configuration structure to copy.
+ *
+ * @pre ctx and cfg must be valid pointers.
+ * @post Controller's gain parameters and bounds are updated.
+ * @note This is an internal helper; configuration validation is done by caller.
+ */
 static void
 fpc_pid_copy_config(struct fpc_pid *ctx, const struct fpc_pid_config *cfg)
 {
@@ -145,6 +230,23 @@ fpc_pid_copy_config(struct fpc_pid *ctx, const struct fpc_pid_config *cfg)
     ctx->d_filter_alpha = cfg->d_filter_alpha;
 }
 
+/**
+ * @brief Set manual output value with bounds checking.
+ *
+ * @param ctx Controller instance to update.
+ * @param manual_output Desired manual output value.
+ *
+ * @return enum fpc_status Status code indicating success or saturation.
+ *
+ * @retval FPC_STATUS_OK if value is within bounds.
+ * @retval FPC_STATUS_SATURATED if value was clamped to out_min..out_max.
+ *
+ * @pre ctx must be a valid initialized controller.
+ * @post manual_output is clamped to the valid output range.
+ * @post last_output is also updated to match manual_output.
+ * @note This function is called when entering MANUAL mode or updating
+ *       manual output while in MANUAL mode.
+ */
 static enum fpc_status
 fpc_pid_set_manual_output(struct fpc_pid *ctx, int32_t manual_output)
 {
@@ -158,6 +260,9 @@ fpc_pid_set_manual_output(struct fpc_pid *ctx, int32_t manual_output)
     return clamped ? FPC_STATUS_SATURATED : FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_pool_init()
+ */
 enum fpc_status
 fpc_pid_pool_init(void)
 {
@@ -169,6 +274,9 @@ fpc_pid_pool_init(void)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_init()
+ */
 enum fpc_status
 fpc_pid_init(struct fpc_pid **ctx, const struct fpc_pid_config *cfg)
 {
@@ -221,6 +329,9 @@ fpc_pid_init(struct fpc_pid **ctx, const struct fpc_pid_config *cfg)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_deinit()
+ */
 enum fpc_status
 fpc_pid_deinit(struct fpc_pid *ctx)
 {
@@ -239,6 +350,9 @@ fpc_pid_deinit(struct fpc_pid *ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_reset()
+ */
 enum fpc_status
 fpc_pid_reset(struct fpc_pid *ctx)
 {
@@ -259,6 +373,9 @@ fpc_pid_reset(struct fpc_pid *ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_set_config()
+ */
 enum fpc_status
 fpc_pid_set_config(struct fpc_pid *ctx, const struct fpc_pid_config *cfg)
 {
@@ -295,6 +412,9 @@ fpc_pid_set_config(struct fpc_pid *ctx, const struct fpc_pid_config *cfg)
     return clamped ? FPC_STATUS_SATURATED : FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_get_config()
+ */
 enum fpc_status
 fpc_pid_get_config(const struct fpc_pid *ctx, struct fpc_pid_config *cfg)
 {
@@ -322,6 +442,9 @@ fpc_pid_get_config(const struct fpc_pid *ctx, struct fpc_pid_config *cfg)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_set_mode()
+ */
 enum fpc_status
 fpc_pid_set_mode(struct fpc_pid *ctx,
                  enum fpc_pid_mode mode,
@@ -363,6 +486,9 @@ fpc_pid_set_mode(struct fpc_pid *ctx,
     return clamped ? FPC_STATUS_SATURATED : FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_compute()
+ */
 enum fpc_status
 fpc_pid_compute(struct fpc_pid *ctx,
                 int32_t setpoint,
@@ -463,6 +589,9 @@ fpc_pid_compute(struct fpc_pid *ctx,
            FPC_STATUS_SATURATED : FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_pid_get_state()
+ */
 enum fpc_status
 fpc_pid_get_state(const struct fpc_pid *ctx, struct fpc_pid_state *state)
 {

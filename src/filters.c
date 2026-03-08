@@ -1,4 +1,14 @@
-/* Configure pool size before including pool.h. */
+/**
+ * @file filters.c
+ * @brief Fixed-point FIR and biquad filter implementations.
+ *
+ * Implements the FIR and biquad (second‑order IIR) filter APIs declared in
+ * @ref fpc_filters.h. All filters use Q16.16 fixed‑point arithmetic and share a
+ * common pool allocator defined via @ref fpc_pool_config.h.
+ *
+ * @note Public API functions are documented in the header; internal helpers are
+ *       marked @internal.
+ */
 #include "../include/fpc_config.h"
 #include "../include/fpc_pool_config.h"
 
@@ -8,6 +18,7 @@
 #include <string.h>
 #include "pool.h"
 
+/** @internal */
 struct fpc_fir {
     pool_id_t pool_id;
     uint16_t order;
@@ -46,6 +57,20 @@ static pool_handle_t fpc_fir_pool_handle = NULL;
 static struct pool_t fpc_biquad_pool_storage = {0};
 static pool_handle_t fpc_biquad_pool_handle = NULL;
 
+/**
+ * @brief Validate FIR filter configuration parameters.
+ *
+ * @param cfg Configuration to validate.
+ *
+ * @return bool true if configuration is valid, false otherwise.
+ *
+ * @pre cfg may be NULL.
+ * @post Returns false if cfg is NULL or if any parameter is invalid.
+ * @note Valid configuration requires:
+ *   - cfg is non-NULL
+ *   - coeffs is non-NULL
+ *   - order is in range [1, FPC_FILTER_MAX_ORDER]
+ */
 static bool
 fpc_fir_config_is_valid(const struct fpc_fir_config *cfg)
 {
@@ -64,12 +89,40 @@ fpc_fir_config_is_valid(const struct fpc_fir_config *cfg)
     return true;
 }
 
+/**
+ * @brief Validate biquad filter configuration parameters.
+ *
+ * @param cfg Configuration to validate.
+ *
+ * @return bool true if configuration is valid, false otherwise.
+ *
+ * @pre cfg may be NULL.
+ * @post Returns false only if cfg is NULL.
+ * @note Biquad filters require no parameter validation beyond NULL checks.
+ */
 static bool
 fpc_biquad_config_is_valid(const struct fpc_biquad_config *cfg)
 {
     return (cfg != NULL);
 }
 
+/**
+ * @brief Validate and retrieve a writable FIR filter pointer.
+ *
+ * @param ctx Filter handle to validate.
+ * @param valid_ctx Pointer to store the validated handle (output).
+ *
+ * @return enum fpc_status Status code indicating validation result.
+ *
+ * @retval FPC_STATUS_OK if ctx is valid and initialized.
+ * @retval FPC_STATUS_NULL_PTR if ctx or valid_ctx is NULL.
+ * @retval FPC_STATUS_NOT_INITIALIZED if pool or filter is not initialized.
+ *
+ * @pre Pool must be initialized via fpc_filter_pool_init().
+ * @post *valid_ctx is set to ctx on success.
+ * @note This function ensures the filter handle corresponds to an actual
+ *       allocated pool slot and has been initialized.
+ */
 static enum fpc_status
 fpc_fir_get_valid_pointer(struct fpc_fir *ctx, struct fpc_fir **valid_ctx)
 {
@@ -96,6 +149,23 @@ fpc_fir_get_valid_pointer(struct fpc_fir *ctx, struct fpc_fir **valid_ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @brief Validate and retrieve a writable biquad filter pointer.
+ *
+ * @param ctx Filter handle to validate.
+ * @param valid_ctx Pointer to store the validated handle (output).
+ *
+ * @return enum fpc_status Status code indicating validation result.
+ *
+ * @retval FPC_STATUS_OK if ctx is valid and initialized.
+ * @retval FPC_STATUS_NULL_PTR if ctx or valid_ctx is NULL.
+ * @retval FPC_STATUS_NOT_INITIALIZED if pool or filter is not initialized.
+ *
+ * @pre Pool must be initialized via fpc_filter_pool_init().
+ * @post *valid_ctx is set to ctx on success.
+ * @note This function ensures the filter handle corresponds to an actual
+ *       allocated pool slot and has been initialized.
+ */
 static enum fpc_status
 fpc_biquad_get_valid_pointer(struct fpc_biquad *ctx,
                              struct fpc_biquad **valid_ctx)
@@ -123,6 +193,18 @@ fpc_biquad_get_valid_pointer(struct fpc_biquad *ctx,
     return FPC_STATUS_OK;
 }
 
+/**
+ * @brief Apply configuration to a FIR filter instance.
+ *
+ * @param ctx Filter instance to configure.
+ * @param cfg Configuration structure with coefficients.
+ *
+ * @return enum fpc_status Status code indicating success or failure.
+ *
+ * @pre ctx and cfg must be valid pointers.
+ * @post Filter order, coefficient buffer, and history are updated.
+ * @note This is an internal helper; configuration validation is done by caller.
+ */
 static enum fpc_status
 fpc_fir_apply_config(struct fpc_fir *ctx, const struct fpc_fir_config *cfg)
 {
@@ -137,6 +219,18 @@ fpc_fir_apply_config(struct fpc_fir *ctx, const struct fpc_fir_config *cfg)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @brief Apply configuration to a biquad filter instance.
+ *
+ * @param ctx Filter instance to configure.
+ * @param cfg Configuration structure with coefficients.
+ *
+ * @return enum fpc_status Status code indicating success or failure.
+ *
+ * @pre ctx and cfg must be valid pointers.
+ * @post All filter coefficients and state variables are updated.
+ * @note This is an internal helper; configuration validation is done by caller.
+ */
 static enum fpc_status
 fpc_biquad_apply_config(struct fpc_biquad *ctx,
                         const struct fpc_biquad_config *cfg)
@@ -157,6 +251,9 @@ fpc_biquad_apply_config(struct fpc_biquad *ctx,
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_filter_pool_init()
+ */
 enum fpc_status
 fpc_filter_pool_init(void)
 {
@@ -173,6 +270,9 @@ fpc_filter_pool_init(void)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_fir_init()
+ */
 enum fpc_status
 fpc_fir_init(struct fpc_fir **ctx, const struct fpc_fir_config *cfg)
 {
@@ -224,6 +324,9 @@ fpc_fir_init(struct fpc_fir **ctx, const struct fpc_fir_config *cfg)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_fir_reset()
+ */
 enum fpc_status
 fpc_fir_reset(struct fpc_fir *ctx)
 {
@@ -240,6 +343,9 @@ fpc_fir_reset(struct fpc_fir *ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_fir_set_config()
+ */
 enum fpc_status
 fpc_fir_set_config(struct fpc_fir *ctx, const struct fpc_fir_config *cfg)
 {
@@ -254,6 +360,9 @@ fpc_fir_set_config(struct fpc_fir *ctx, const struct fpc_fir_config *cfg)
     return fpc_fir_apply_config(valid_ctx, cfg);
 }
 
+/**
+ * @copydoc fpc_fir_process()
+ */
 enum fpc_status
 fpc_fir_process(struct fpc_fir *ctx, int32_t sample, int32_t *output)
 {
@@ -304,6 +413,9 @@ fpc_fir_process(struct fpc_fir *ctx, int32_t sample, int32_t *output)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_fir_deinit()
+ */
 enum fpc_status
 fpc_fir_deinit(struct fpc_fir *ctx)
 {
@@ -322,6 +434,9 @@ fpc_fir_deinit(struct fpc_fir *ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_biquad_init()
+ */
 enum fpc_status
 fpc_biquad_init(struct fpc_biquad **ctx, const struct fpc_biquad_config *cfg)
 {
@@ -373,6 +488,9 @@ fpc_biquad_init(struct fpc_biquad **ctx, const struct fpc_biquad_config *cfg)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_biquad_reset()
+ */
 enum fpc_status
 fpc_biquad_reset(struct fpc_biquad *ctx)
 {
@@ -391,9 +509,12 @@ fpc_biquad_reset(struct fpc_biquad *ctx)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_biquad_set_config()
+ */
 enum fpc_status
 fpc_biquad_set_config(struct fpc_biquad *ctx,
-                      const struct fpc_biquad_config *cfg)
+                       const struct fpc_biquad_config *cfg)
 {
     struct fpc_biquad *valid_ctx = NULL;
     enum fpc_status status;
@@ -406,6 +527,9 @@ fpc_biquad_set_config(struct fpc_biquad *ctx,
     return fpc_biquad_apply_config(valid_ctx, cfg);
 }
 
+/**
+ * @copydoc fpc_biquad_process()
+ */
 enum fpc_status
 fpc_biquad_process(struct fpc_biquad *ctx, int32_t sample, int32_t *output)
 {
@@ -446,6 +570,9 @@ fpc_biquad_process(struct fpc_biquad *ctx, int32_t sample, int32_t *output)
     return FPC_STATUS_OK;
 }
 
+/**
+ * @copydoc fpc_biquad_deinit()
+ */
 enum fpc_status
 fpc_biquad_deinit(struct fpc_biquad *ctx)
 {
