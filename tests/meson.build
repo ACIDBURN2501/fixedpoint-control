@@ -11,5 +11,5 @@ test_exe_filters = executable('test_filters',
         include_directories : inc,
         link_with : lib)
 
-test('pid_controller', test_exe_pid)
-test('filters', test_exe_filters)
+test('pid_controller', test_exe_pid, protocol : 'tap')
+test('filters', test_exe_filters, protocol : 'tap')

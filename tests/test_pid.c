@@ -1,8 +1,43 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "../include/fpc_config.h"
 #include "../include/fpc_pid.h"
+
+typedef void (*test_fn)(void);
+
+static const char *current_test_name = NULL;
+static unsigned int current_test_index = 0U;
+
+static void
+test_assert_impl(int condition, const char *expr, const char *file, int line)
+{
+    if (condition) {
+        return;
+    }
+
+    fprintf(stderr, "not ok %u - %s\n", current_test_index, current_test_name);
+    fprintf(stderr, "# Assertion failed: %s\n", expr);
+    fprintf(stderr, "# Location: %s:%d\n", file, line);
+    fflush(stderr);
+    exit(EXIT_FAILURE);
+}
+
+#undef assert
+#define assert(expr) test_assert_impl((expr) != 0, #expr, __FILE__, __LINE__)
+
+static void
+run_test(const char *name, test_fn fn, unsigned int *index)
+{
+    current_test_name = name;
+    current_test_index = *index;
+    printf("# %s\n", name);
+    fn();
+    printf("ok %u - %s\n", *index, name);
+    *index += 1U;
+}
 
 static struct fpc_pid_config
 test_config(void)
@@ -309,18 +344,25 @@ test_overflow_detection(void)
 int
 main(void)
 {
-    test_pool_init_required();
-    test_init_and_get_config();
-    test_invalid_config_rejected();
-    test_saturation_reporting();
-    test_state_retrieval();
-    test_derivative_filtering();
-    test_reset_clears_runtime_state();
-    test_set_config_clamps_state();
-    test_pool_exhaustion();
-    test_manual_mode_and_bumpless_return();
-    test_manual_mode_clamps_output();
-    test_null_and_invalid_runtime_calls();
-    test_overflow_detection();
+    unsigned int test_index = 1U;
+
+    setvbuf(stdout, NULL, _IONBF, 0);
+    puts("TAP version 13");
+    puts("1..13");
+
+    run_test("pool_init_required", test_pool_init_required, &test_index);
+    run_test("init_and_get_config", test_init_and_get_config, &test_index);
+    run_test("invalid_config_rejected", test_invalid_config_rejected, &test_index);
+    run_test("saturation_reporting", test_saturation_reporting, &test_index);
+    run_test("state_retrieval", test_state_retrieval, &test_index);
+    run_test("derivative_filtering", test_derivative_filtering, &test_index);
+    run_test("reset_clears_runtime_state", test_reset_clears_runtime_state, &test_index);
+    run_test("set_config_clamps_state", test_set_config_clamps_state, &test_index);
+    run_test("pool_exhaustion", test_pool_exhaustion, &test_index);
+    run_test("manual_mode_and_bumpless_return", test_manual_mode_and_bumpless_return, &test_index);
+    run_test("manual_mode_clamps_output", test_manual_mode_clamps_output, &test_index);
+    run_test("null_and_invalid_runtime_calls", test_null_and_invalid_runtime_calls, &test_index);
+    run_test("overflow_detection", test_overflow_detection, &test_index);
+
     return 0;
 }

@@ -1,8 +1,43 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "../include/fpc_config.h"
 #include "../include/fpc_filters.h"
+
+typedef void (*test_fn)(void);
+
+static const char *current_test_name = NULL;
+static unsigned int current_test_index = 0U;
+
+static void
+test_assert_impl(int condition, const char *expr, const char *file, int line)
+{
+    if (condition) {
+        return;
+    }
+
+    fprintf(stderr, "not ok %u - %s\n", current_test_index, current_test_name);
+    fprintf(stderr, "# Assertion failed: %s\n", expr);
+    fprintf(stderr, "# Location: %s:%d\n", file, line);
+    fflush(stderr);
+    exit(EXIT_FAILURE);
+}
+
+#undef assert
+#define assert(expr) test_assert_impl((expr) != 0, #expr, __FILE__, __LINE__)
+
+static void
+run_test(const char *name, test_fn fn, unsigned int *index)
+{
+    current_test_name = name;
+    current_test_index = *index;
+    printf("# %s\n", name);
+    fn();
+    printf("ok %u - %s\n", *index, name);
+    *index += 1U;
+}
 
 static struct fpc_fir_config
 fir_average_config(void)
@@ -232,15 +267,22 @@ test_biquad_pool_exhaustion(void)
 int
 main(void)
 {
-    test_filter_pool_init_required();
-    test_fir_init_and_process();
-    test_fir_reset_and_reconfigure();
-    test_fir_invalid_usage();
-    test_fir_pool_exhaustion();
-    test_biquad_identity_and_reset();
-    test_biquad_reconfigure();
-    test_biquad_invalid_usage();
-    test_filter_overflow_reporting();
-    test_biquad_pool_exhaustion();
+    unsigned int test_index = 1U;
+
+    setvbuf(stdout, NULL, _IONBF, 0);
+    puts("TAP version 13");
+    puts("1..10");
+
+    run_test("filter_pool_init_required", test_filter_pool_init_required, &test_index);
+    run_test("fir_init_and_process", test_fir_init_and_process, &test_index);
+    run_test("fir_reset_and_reconfigure", test_fir_reset_and_reconfigure, &test_index);
+    run_test("fir_invalid_usage", test_fir_invalid_usage, &test_index);
+    run_test("fir_pool_exhaustion", test_fir_pool_exhaustion, &test_index);
+    run_test("biquad_identity_and_reset", test_biquad_identity_and_reset, &test_index);
+    run_test("biquad_reconfigure", test_biquad_reconfigure, &test_index);
+    run_test("biquad_invalid_usage", test_biquad_invalid_usage, &test_index);
+    run_test("filter_overflow_reporting", test_filter_overflow_reporting, &test_index);
+    run_test("biquad_pool_exhaustion", test_biquad_pool_exhaustion, &test_index);
+
     return 0;
 }
