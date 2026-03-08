@@ -53,3 +53,15 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# clangd
+.cache/
+
+# Meson build directories and outputs
+/build/
+/builddir/
+/.meson-subproject-wrap-hash.txt
+
+# Meson subproject generated state
+/subprojects/packagecache/
+/subprojects/*.wraplock
