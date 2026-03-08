@@ -1,0 +1,15 @@
+option(
+  'fpc_max_instances',
+  type : 'integer',
+  value : 8,
+  min : 1,
+  description : 'Maximum number of pooled PID/FIR/biquad instances'
+)
+
+option(
+  'fpc_pool_item_size',
+  type : 'integer',
+  value : 528,
+  min : 1,
+  description : 'Size in bytes of each pooled object slot'
+)
