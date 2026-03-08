@@ -1,4 +1,4 @@
-project('fixedpoint-control', 'c', version: '1.1.1', default_options: ['c_std=c11'])
+project('fixedpoint-control', 'c', version: '1.1.2', default_options: ['c_std=c11'])
 
 conf = configuration_data()
 conf.set('VERSION', meson.project_version())
@@ -47,10 +47,10 @@ meson.override_dependency('fixedpoint-control', fpc_dep)
 install_headers(
   files(
     'include/fpc_config.h',
-    'include/fpc_filters.h'
+    'include/fpc_filters.h',
     'include/fpc_pid.h',
     'include/fpc_pool_config.h',
-    'include/fpc_status.h',,
+    'include/fpc_status.h',
   ),
   version_header,
   build_config_header,
