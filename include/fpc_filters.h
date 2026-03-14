@@ -14,11 +14,8 @@
 #define FPC_FILTERS_H_
 
 #include <stdint.h>
+#include "fpc_config.h"
 #include "fpc_status.h"
-
-#ifndef FPC_FILTER_MAX_ORDER
-#define FPC_FILTER_MAX_ORDER 64U
-#endif
 
 struct fpc_fir;
 struct fpc_biquad;

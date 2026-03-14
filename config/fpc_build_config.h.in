@@ -1,8 +1,0 @@
-/* Auto-generated build configuration. */
-#ifndef FPC_BUILD_CONFIG_H_
-#define FPC_BUILD_CONFIG_H_
-
-#define FPC_MAX_INSTANCES @FPC_MAX_INSTANCES@
-#define FPC_POOL_ITEM_SIZE @FPC_POOL_ITEM_SIZE@
-
-#endif /* FPC_BUILD_CONFIG_H_ */

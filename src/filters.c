@@ -4,14 +4,12 @@
  *
  * Implements the FIR and biquad (second‑order IIR) filter APIs declared in
  * @ref fpc_filters.h. All filters use Q16.16 fixed‑point arithmetic and share a
- * common pool allocator defined via @ref fpc_pool_config.h.
+ * common pool allocator configured via @ref fpc_config.h.
  *
  * @note Public API functions are documented in the header; internal helpers are
  *       marked @internal.
  */
 #include "../include/fpc_config.h"
-#include "../include/fpc_pool_config.h"
-
 #include "../include/fpc_filters.h"
 #include <stdbool.h>
 #include <limits.h>

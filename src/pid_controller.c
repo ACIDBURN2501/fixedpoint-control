@@ -3,7 +3,7 @@
  * @brief Fixed-point PID controller implementation.
  *
  * Provides the concrete implementation of the PID API declared in @ref fpc_pid.h.
- * Instances are allocated from a fixed-size pool defined via @ref fpc_pool_config.h.
+ * Instances are allocated from a fixed-size pool configured via @ref fpc_config.h.
  * The controller operates on Q16.16 fixed-point numbers and follows the discrete
  * PID equations documented in the header, including optional derivative smoothing.
  *
@@ -11,8 +11,6 @@
  *       functions are marked @internal.
  */
 #include "../include/fpc_config.h"
-#include "../include/fpc_pool_config.h"
-
 #include "../include/fpc_pid.h"
 #include <stdbool.h>
 #include <limits.h>
